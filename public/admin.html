@@ -17,7 +17,7 @@
 
   <script>
     async function fetchUsers() {
-      const res = await fetch('/admin/users');
+      const res = await fetch('/admin/api/users');
       const users = await res.json();
       document.getElementById('userList').innerHTML = users.map(
         (u, i) => `<li>${u.email} - ${u.domain} - ${u.accessKey}
@@ -26,14 +26,14 @@
     }
 
     async function deleteUser(index) {
-      await fetch('/admin/users/' + index, { method: 'DELETE' });
+      await fetch('/admin/api/users/' + index, { method: 'DELETE' });
       fetchUsers();
     }
 
     document.getElementById('addForm').addEventListener('submit', async e => {
       e.preventDefault();
       const form = new FormData(e.target);
-      await fetch('/admin/users', {
+      await fetch('/admin/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.fromEntries(form.entries()))

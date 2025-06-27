@@ -8,7 +8,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/admin', adminRoutes);
+app.use('/admin/api', adminRoutes); // API routes under /admin/api
+
+// Serve admin.html manually for /admin
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Serve static assets (if any)
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
