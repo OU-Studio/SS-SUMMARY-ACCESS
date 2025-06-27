@@ -10,6 +10,25 @@ app.use(cors());
 app.use(express.json());
 app.use('/admin/api', adminRoutes); // API routes under /admin/api
 
+const fs = require('fs');
+const path = require('path');
+const verifyAccess = require('./middleware/verifyAccess');
+
+app.post('/check', verifyAccess, (req, res) => {
+  const pluginPath = path.join(__dirname, 'public', 'plugins', 'ou-summary-v2.2.js');
+
+  fs.readFile(pluginPath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Plugin read error:', err);
+      return res.status(500).json({ error: 'Plugin not found' });
+    }
+
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(data);
+  });
+});
+
+
 // Serve admin.html manually for /admin
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
