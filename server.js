@@ -44,14 +44,12 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-const usersFile = '/data/authorized-users.json';
+const usersFilePath = '/data/authorized-users.json'; // this must be a string
 
-if (!fs.existsSync(usersFile)) {
-  fs.writeFileSync(usersFile, JSON.stringify([], null, 2), 'utf-8');
+if (!fs.existsSync(usersFilePath)) {
+  fs.writeFileSync(usersFilePath, JSON.stringify([], null, 2), 'utf-8');
 }
 
 
-if (!fs.existsSync(path)) {
-  fs.writeFileSync(path, JSON.stringify([], null, 2), 'utf-8');
-}
+
 
