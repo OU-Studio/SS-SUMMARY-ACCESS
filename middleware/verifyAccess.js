@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 
 module.exports = function verifyAccess(req, res, next) {
   const accessKey = req.body.accessKey || req.headers['x-access-key'];
@@ -9,7 +8,9 @@ module.exports = function verifyAccess(req, res, next) {
     return res.status(400).json({ error: 'Missing access key or domain.' });
   }
 
-  const users = JSON.parse(fs.readFileSync(path.join(__dirname, '/data/authorized-users.json'), 'utf-8'));
+  // ✅ Read from persistent volume
+  const users = JSON.parse(fs.readFileSync('/data/authorized-users.json', 'utf-8'));
+
   const match = users.find(user => user.domain === domain && user.accessKey === accessKey);
 
   if (!match) {
