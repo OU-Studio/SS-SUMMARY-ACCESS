@@ -11,7 +11,6 @@ app.use(express.json());
 app.use('/admin/api', adminRoutes); // API routes under /admin/api
 
 const fs = require('fs');
-const path = require('path');
 const verifyAccess = require('./middleware/verifyAccess');
 
 app.post('/check', verifyAccess, (req, res) => {
