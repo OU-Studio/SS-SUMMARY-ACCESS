@@ -14,7 +14,7 @@ const fs = require('fs');
 const verifyAccess = require('./middleware/verifyAccess');
 
 app.post('/check', verifyAccess, (req, res) => {
-  const pluginPath = path.join(__dirname, 'public', 'plugins', 'ou-summary-v2.2.js');
+  const pluginPath = path.join(__dirname, 'public', 'plugins', 'ou-summary-v2.3.js');
 
   fs.readFile(pluginPath, 'utf8', (err, data) => {
     if (err) {
