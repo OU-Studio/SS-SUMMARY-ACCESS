@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = function verifyAccess(req, res, next) {
-  const accessKey = req.headers['x-access-key'];
-  const domain = req.headers['x-domain'];
+  const accessKey = req.body.accessKey || req.headers['x-access-key'];
+  const domain = req.body.domain || req.headers['x-domain'];
 
   if (!accessKey || !domain) {
     return res.status(400).json({ error: 'Missing access key or domain.' });
