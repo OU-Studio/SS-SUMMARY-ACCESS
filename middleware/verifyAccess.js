@@ -8,10 +8,12 @@ module.exports = function verifyAccess(req, res, next) {
     return res.status(400).json({ error: 'Missing access key or domain.' });
   }
 
-  // ✅ Read from persistent volume
   const users = JSON.parse(fs.readFileSync('/data/authorized-users.json', 'utf-8'));
 
-  const match = users.find(user => user.domain === domain && user.accessKey === accessKey);
+  const match = users.find(user =>
+    user.accessKey === accessKey &&
+    (user.domain === domain || user.ssDomain === domain)
+  );
 
   if (!match) {
     return res.status(403).json({ error: 'Unauthorized' });

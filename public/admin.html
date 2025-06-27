@@ -7,11 +7,13 @@
 <body>
   <h1>OU Plugin Admin</h1>
   <form id="addForm">
-    <input placeholder="Email" name="email" required />
-    <input placeholder="Domain" name="domain" required />
-    <input placeholder="Access Key" name="accessKey" required />
-    <button type="submit">Add User</button>
-  </form>
+  <input placeholder="Email" name="email" required />
+  <input placeholder="Squarespace Domain" name="ssDomain" required />
+  <input placeholder="Custom Domain" name="domain" required />
+  <input placeholder="Access Key" name="accessKey" required />
+  <button type="submit">Add User</button>
+</form>
+
   <hr />
   <ul id="userList"></ul>
 
@@ -20,9 +22,13 @@
       const res = await fetch('/admin/api/users');
       const users = await res.json();
       document.getElementById('userList').innerHTML = users.map(
-        (u, i) => `<li>${u.email} - ${u.domain} - ${u.accessKey}
-          <button onclick="deleteUser(${i})">❌</button></li>`
-      ).join('');
+  (u, i) => `<li>${u.email}<br>
+               SS: ${u.ssDomain}<br>
+               Domain: ${u.domain}<br>
+               Key: ${u.accessKey}
+             <button onclick="deleteUser(${i})">❌</button></li>`
+).join('');
+
     }
 
     async function deleteUser(index) {
