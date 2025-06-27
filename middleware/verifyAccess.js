@@ -9,7 +9,7 @@ module.exports = function verifyAccess(req, res, next) {
     return res.status(400).json({ error: 'Missing access key or domain.' });
   }
 
-  const users = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/authorized-users.json'), 'utf-8'));
+  const users = JSON.parse(fs.readFileSync(path.join(__dirname, '/data/authorized-users.json'), 'utf-8'));
   const match = users.find(user => user.domain === domain && user.accessKey === accessKey);
 
   if (!match) {

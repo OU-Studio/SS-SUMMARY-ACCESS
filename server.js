@@ -43,3 +43,11 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+const fs = require('fs');
+const path = '/data/authorized-users.json';
+
+if (!fs.existsSync(path)) {
+  fs.writeFileSync(path, JSON.stringify([], null, 2), 'utf-8');
+}
+

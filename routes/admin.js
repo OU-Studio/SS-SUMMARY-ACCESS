@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
-const usersPath = path.join(__dirname, '../data/authorized-users.json');
+const usersPath = path.join(__dirname, '/data/authorized-users.json');
 
 function loadUsers() {
   return JSON.parse(fs.readFileSync(usersPath, 'utf-8'));
