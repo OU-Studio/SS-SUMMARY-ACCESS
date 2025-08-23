@@ -27,6 +27,25 @@ app.use('/admin/api', adminRoutes); // API routes under /admin/api
 const fs = require('fs');
 const verifyAccess = require('./middleware/verifyAccess');
 
+const usersDirPath = '/data';
+const usersFilePath = '/data/authorized-users.json';
+
+try {
+  // Ensure the /data directory exists (Railway Volume mount)
+  if (!fs.existsSync(usersDirPath)) {
+    fs.mkdirSync(usersDirPath, { recursive: true });
+  }
+
+  // Seed the file if missing
+  if (!fs.existsSync(usersFilePath)) {
+    fs.writeFileSync(usersFilePath, JSON.stringify([], null, 2), 'utf-8');
+  }
+} catch (e) {
+  console.error('Failed to initialize persistent storage at /data:', e);
+  // Optional: bail early so you notice the problem in logs
+  process.exit(1);
+}
+
 app.post('/check', verifyAccess, (req, res) => {
   const pluginPath = path.join(__dirname, 'public', 'plugins', 'ou-summary-v2.5.js');
 
@@ -59,11 +78,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-const usersFilePath = '/data/authorized-users.json'; // this must be a string
 
-if (!fs.existsSync(usersFilePath)) {
-  fs.writeFileSync(usersFilePath, JSON.stringify([], null, 2), 'utf-8');
-}
 
 
 
