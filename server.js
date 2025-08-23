@@ -11,6 +11,8 @@ const auth = require('basic-auth');
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'secret';
 
+const summaryHandler = require('./routes/summary');
+
 const protect = (req, res, next) => {
   const credentials = auth(req);
   if (!credentials || credentials.name !== ADMIN_USER || credentials.pass !== ADMIN_PASS) {
@@ -46,6 +48,9 @@ try {
   process.exit(1);
 }
 
+if (!fs.existsSync('/data/cache')) fs.mkdirSync('/data/cache', { recursive: true });
+
+
 app.post('/check', verifyAccess, (req, res) => {
   const pluginPath = path.join(__dirname, 'public', 'plugins', 'ou-summary-v2.5.js');
 
@@ -73,6 +78,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.send('OU Plugin Auth Server Running');
 });
+
+// after other routes
+app.get('/api/summary', summaryHandler);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
