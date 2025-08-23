@@ -123,7 +123,6 @@
       initialUrl += (initialUrl.includes('?') ? '&' : '?') + 'format=json';
     }
 
-    const items = [];
     // BEFORE (browser paginates itself)
 // await fetchAllPages(initialUrl, items);
 
