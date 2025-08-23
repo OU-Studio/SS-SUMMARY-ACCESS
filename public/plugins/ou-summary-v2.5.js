@@ -1,14 +1,9 @@
 /*!
- * OU Summary Plugin v2.5 (with header config)
- * Header example:
- *   /full-portfolio?ouConfig=mode:load|loadCount:9|buttonText:Load%20More...|buttonBgColor:%2305f54d|buttonTextColor:%23000000
- *
- * Keys:
- *   mode: "all" | "load"
- *   loadCount: number
- *   buttonText: string
- *   buttonBgColor: CSS color (e.g. #333333)
- *   buttonTextColor: CSS color
+ * OU Summary Plugin v2.6
+ * - Header config via ?ouConfig=mode:load|loadCount:9|buttonText:...|buttonBgColor:#333|buttonTextColor:#fff
+ * - Server aggregator + cache at /api/summary with automatic client fallback
+ * - Load More with live Category/Tag filters that preserve visible count
+ * - Squarespace SPA-safe + late-injection safe
  */
 
 (function () {
@@ -19,7 +14,7 @@
   const warn = (...a) => console.warn('[OU Summary]', ...a);
   const err = (...a) => console.error('[OU Summary]', ...a);
 
-  // ---- Event wiring (SPA/late injection safe)
+  // ---------------- Events (SPA / late injection safe)
   document.addEventListener('DOMContentLoaded', init);
   window.addEventListener('mercury:load', init);
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
@@ -27,32 +22,15 @@
   }
   const mo = new MutationObserver(() => debounce(init, 100)());
   mo.observe(document.documentElement, { childList: true, subtree: true });
-
   let debounceTimer;
-  function debounce(fn, wait) {
-    return function () {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fn, wait);
-    };
-  }
+  function debounce(fn, wait) { return function () { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, wait); }; }
 
-  async function init() {
-    try {
-      const blocks = Array.from(document.querySelectorAll(SELECTOR_BLOCK))
-        .filter(b => !b.hasAttribute(BLOCK_FLAG));
-      if (!blocks.length) return;
+  // ---------------- State helpers
+  const OU_SUMMARY_STATE = new WeakMap();
+  function uniqueStrings(arr) { return Array.from(new Set(arr.filter(Boolean))); }
 
-      for (const block of blocks) {
-        block.setAttribute(BLOCK_FLAG, '1');
-        processBlock(block).catch(e => err('processBlock failed', e));
-      }
-    } catch (e) {
-      err('init error', e);
-    }
-  }
-
+  // ---------------- Header config parser
   function parseOUConfigFromHeader(headerText) {
-    // headerText like: "/blog?ouConfig=mode:load|loadCount:9|buttonText:Load%20More..."
     const [base, cfgRaw] = String(headerText || '').split('?ouConfig=');
     const cfg = {};
     if (cfgRaw) {
@@ -73,6 +51,123 @@
     return { baseUrl: base || '', config: cfg };
   }
 
+  // ---------------- Filtering + rendering helpers
+  function filterItems(items, cat, tag) {
+    return items.filter(it => {
+      let ok = true;
+      if (cat) ok = ok && (it.categories || []).includes(cat);
+      if (ok && tag) ok = ok && (it.tags || []).includes(tag);
+      return ok;
+    });
+  }
+
+  function renderList(container, templateItem, items, start, count, baseUrl) {
+    container.innerHTML = '';
+    const end = Math.min(items.length, start + count);
+    for (let i = start; i < end; i++) {
+      container.appendChild(createSummaryItemClone(items[i], templateItem, baseUrl));
+    }
+  }
+
+  function remainingItemsCount(state) {
+    return Math.max(0, state.filteredItems.length - state.rendered);
+  }
+
+  function updateLoadMoreUI(block, container, state, templateItem, baseUrl) {
+    // place the wrapper after the list
+    let wrap = block.querySelector('.ou-summary-load-more-wrapper');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'ou-summary-load-more-wrapper';
+      container.parentElement && container.parentElement.appendChild(wrap);
+    }
+    let btn = wrap.querySelector('.ou-summary-load-more');
+    if (!btn) {
+      btn = document.createElement('p');
+      btn.className = 'ou-summary-load-more';
+      wrap.appendChild(btn);
+    }
+    // label + colors from state.ui
+    btn.textContent = state.ui.text;
+    btn.style.backgroundColor = state.ui.bg;
+    btn.style.color = state.ui.fg;
+
+    // visibility by remaining items
+    const remaining = remainingItemsCount(state);
+    wrap.style.display = remaining > 0 ? 'block' : 'none';
+
+    // replace listener cleanly
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+
+    newBtn.addEventListener('click', () => {
+      const start = state.rendered;
+      const nextCount = Math.min(state.loadCount, remainingItemsCount(state));
+      const end = start + nextCount;
+
+      for (let i = start; i < end; i++) {
+        container.appendChild(createSummaryItemClone(state.filteredItems[i], templateItem, baseUrl));
+      }
+      state.rendered = end;
+
+      const left = remainingItemsCount(state);
+      wrap.style.display = left > 0 ? 'block' : 'none';
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
+
+  function buildFilterBar(block, items, onChange) {
+    const allCats = uniqueStrings(items.flatMap(i => i.categories || []));
+    const allTags = uniqueStrings(items.flatMap(i => i.tags || []));
+    if (!allCats.length && !allTags.length) return;
+
+    let bar = block.querySelector('.ou-summary-filterbar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'ou-summary-filterbar';
+      const contentWrap = block.querySelector('.sqs-block-content') || block;
+      contentWrap.insertBefore(bar, contentWrap.firstChild);
+    } else {
+      bar.innerHTML = '';
+    }
+
+    const catSelect = document.createElement('select');
+    const tagSelect = document.createElement('select');
+
+    function fillSelect(select, label, values) {
+      select.innerHTML = '';
+      const any = document.createElement('option');
+      any.value = '';
+      any.textContent = `All ${label}`;
+      select.appendChild(any);
+      values.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+    }
+
+    if (allCats.length) fillSelect(catSelect, 'Categories', allCats);
+    if (allTags.length) fillSelect(tagSelect, 'Tags', allTags);
+
+    bar.style.display = 'flex';
+    bar.style.gap = '10px';
+    bar.style.margin = '0 0 12px';
+
+    if (allCats.length) { catSelect.className = 'ou-summary-filter ou-summary-filter--cat'; bar.appendChild(catSelect); }
+    if (allTags.length) { tagSelect.className = 'ou-summary-filter ou-summary-filter--tag'; bar.appendChild(tagSelect); }
+
+    function handleChange() {
+      const nextCat = catSelect ? catSelect.value || null : null;
+      const nextTag = tagSelect ? tagSelect.value || null : null;
+      onChange(nextCat, nextTag);
+    }
+    if (allCats.length) catSelect.addEventListener('change', handleChange);
+    if (allTags.length) tagSelect.addEventListener('change', handleChange);
+  }
+
+  // ---------------- Main block processor
   async function processBlock(block) {
     const jsonAttr = block.getAttribute('data-block-json');
     if (!jsonAttr) return;
@@ -85,7 +180,7 @@
       return;
     }
 
-    // Parse header config
+    // Header config
     const { baseUrl, config: inlineCfg } = parseOUConfigFromHeader(config.headerText || '');
     const defaults = {
       mode: 'load',
@@ -106,136 +201,156 @@
     loader.textContent = 'Loading...';
     listEl.appendChild(loader);
 
-    // Build initial URL with native filters + format=json
+    // Build initial URL with native filters + ?format=json
     const qp = [];
     if (config.filter?.category) qp.push(`category=${encodeURIComponent(config.filter.category)}`);
-    if (config.filter?.tag) qp.push(`tag=${encodeURIComponent(config.filter.tag)}`);
+    if (config.filter?.tag)      qp.push(`tag=${encodeURIComponent(config.filter.tag)}`);
 
     let initialUrl = baseUrl || '';
-    if (!initialUrl) {
-      // Fallback to headerText as-is
-      initialUrl = config.headerText;
+    if (!initialUrl) initialUrl = config.headerText || '';
+    if (qp.length) initialUrl += (initialUrl.includes('?') ? '&' : '?') + qp.join('&');
+    if (!initialUrl.includes('format=json')) initialUrl += (initialUrl.includes('?') ? '&' : '?') + 'format=json';
+
+    // Prepare container + template before we clear
+    const container = listEl;
+    const templateItem = container.querySelector('.summary-item');
+    if (!templateItem) { loader.remove(); warn('No template .summary-item found'); return; }
+
+    // Clear and prep
+    container.innerHTML = '';
+    container.classList.add('ou-carousel-container');
+    container.style.overflow = 'hidden';
+
+    // ------------ Aggregate via server API with guaranteed fallback
+    const apiBase = 'https://ss-summary-access-production.up.railway.app/api/summary';
+    const currentDomain = window.location.hostname.replace(/\.$/, ''); // keep www, strip trailing dot only
+    const apiParams = new URLSearchParams();
+    apiParams.set('domain', currentDomain);
+    apiParams.set('base', baseUrl || config.headerText || '/');
+    if (config.filter?.category) apiParams.set('category', config.filter.category);
+    if (config.filter?.tag)      apiParams.set('tag', config.filter.tag);
+    if (config.filter?.featured === true) apiParams.set('featured', 'true');
+    const apiUrl = `${apiBase}?${apiParams.toString()}`;
+
+    async function fetchWithTimeout(url, opts = {}, ms = 6000) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), ms);
+      try { return await fetch(url, { ...opts, signal: controller.signal }); }
+      finally { clearTimeout(t); }
     }
-    if (qp.length) {
-      initialUrl += (initialUrl.includes('?') ? '&' : '?') + qp.join('&');
+    async function fetchAllPagesClient(url, out) {
+      try {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        if (!r.ok) throw new Error(`client ${r.status}`);
+        const j = await r.json();
+        (j.items || []).forEach(i => out.push(i));
+        const next = j.pagination?.nextPage && j.pagination?.nextPageUrl;
+        if (next) {
+          const u = new URL(next, window.location.origin);
+          if (!u.searchParams.has('format')) u.searchParams.set('format', 'json');
+          await fetchAllPagesClient(u.toString(), out);
+        }
+      } catch (e) {
+        console.error('Client fetchAllPages failed:', url, e);
+      }
     }
-    if (!initialUrl.includes('format=json')) {
-      initialUrl += (initialUrl.includes('?') ? '&' : '?') + 'format=json';
+
+    let items = [];
+    let usedFallback = false;
+    try {
+      const res = await fetchWithTimeout(apiUrl, { credentials: 'omit' }, 6000);
+      if (!res.ok) throw new Error(`api ${res.status}`);
+      const json = await res.json();
+      items = Array.isArray(json.items) ? json.items : [];
+    } catch (e) {
+      console.warn('Summary API failed, falling back:', e.message);
+      usedFallback = true;
+      const clientItems = [];
+      await fetchAllPagesClient(initialUrl, clientItems);
+      items = clientItems;
     }
+    log(`Loaded ${items.length} items (${usedFallback ? 'fallback' : 'server cache'})`);
 
-    // BEFORE (browser paginates itself)
-// await fetchAllPages(initialUrl, items);
-
-// AFTER (server aggregates + caches)
-const apiBase = 'https://ss-summary-access-production.up.railway.app/api/summary';
-const currentDomain = window.location.hostname.replace(/^www\./, '');
-
-const apiParams = new URLSearchParams();
-apiParams.set('domain', currentDomain);
-apiParams.set('base', baseUrl || config.headerText || '/');
-if (config.filter?.category) apiParams.set('category', config.filter.category);
-if (config.filter?.tag)      apiParams.set('tag', config.filter.tag);
-if (config.filter?.featured === true) apiParams.set('featured', 'true');
-
-const apiUrl = `${apiBase}?${apiParams.toString()}`;
-
-let items = [];
-try {
-  const res = await fetch(apiUrl, { credentials: 'omit' });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  const json = await res.json();
-  items = Array.isArray(json.items) ? json.items : [];
-} catch (e) {
-  console.error('Summary API failed:', e);
-}
-
-
+    // Respect "featured" if not already server-filtered
     let allItems = items;
-    if (config.filter?.featured === true) {
-      allItems = allItems.filter(i => i.starred === true);
+    if (config.filter?.featured === true && !usedFallback) {
+      // server already did it; if fallback, ensure it now
+      allItems = items;
+    } else if (config.filter?.featured === true && usedFallback) {
+      allItems = items.filter(i => i.starred === true);
     }
 
-    const templateItem = listEl.querySelector('.summary-item');
-    listEl.innerHTML = '';
-    listEl.classList.add('ou-carousel-container');
-    listEl.style.overflow = 'hidden';
+    // -------- Filter + Load More aware rendering
+    const state = {
+      allItems,
+      filteredItems: allItems,
+      rendered: 0,
+      loadCount: Number(ouCfg.loadCount) || 6,
+      activeCategory: null,
+      activeTag: null,
+      ui: {
+        text: String(ouCfg.buttonText || 'Load More...'),
+        bg: String(ouCfg.buttonBgColor || '#333333'),
+        fg: String(ouCfg.buttonTextColor || '#ffffff')
+      }
+    };
+    OU_SUMMARY_STATE.set(block, state);
 
-    if (!templateItem) {
-      loader.remove();
-      warn('No template .summary-item found');
-      return;
-    }
+    // Build filter bar (only in load mode)
+    if (ouCfg.mode !== 'all') {
+      buildFilterBar(block, state.allItems, (nextCat, nextTag) => {
+        state.activeCategory = nextCat || null;
+        state.activeTag = nextTag || null;
+        state.filteredItems = filterItems(state.allItems, state.activeCategory, state.activeTag);
 
-    if (ouCfg.mode === 'all') {
-      allItems.forEach(item => {
-        listEl.appendChild(createSummaryItemClone(item, templateItem, baseUrl));
-      });
-    } else {
-      // load-more mode
-      let rendered = 0;
-      const loadCount = Number(ouCfg.loadCount) || 6;
+        const keep = Math.min(state.rendered, state.filteredItems.length);
+        renderList(container, templateItem, state.filteredItems, 0, keep, baseUrl);
+        state.rendered = keep;
 
-      const wrap = document.createElement('div');
-      wrap.className = 'ou-summary-load-more-wrapper';
-
-      const btn = document.createElement('p');
-      btn.className = 'ou-summary-load-more';
-      btn.textContent = String(ouCfg.buttonText || 'Load More...');
-      btn.style.backgroundColor = String(ouCfg.buttonBgColor || '#333333');
-      btn.style.color = String(ouCfg.buttonTextColor || '#ffffff');
-      wrap.appendChild(btn);
-
-      (function renderNextBatch() {
-        const next = allItems.slice(rendered, rendered + loadCount);
-        next.forEach(item => listEl.appendChild(createSummaryItemClone(item, templateItem, baseUrl)));
-        rendered += next.length;
-        if (rendered >= allItems.length) wrap.style.display = 'none';
-      })();
-
-      btn.addEventListener('click', () => {
-        const next = allItems.slice(rendered, rendered + loadCount);
-        next.forEach(item => listEl.appendChild(createSummaryItemClone(item, templateItem, baseUrl)));
-        rendered += next.length;
-        if (rendered >= allItems.length) wrap.style.display = 'none';
+        updateLoadMoreUI(block, container, state, templateItem, baseUrl);
         window.dispatchEvent(new Event('resize'));
       });
-
-      // Insert wrapper after the list
-      listEl.parentElement && listEl.parentElement.appendChild(wrap);
     }
 
+    // Initial render
+    if (ouCfg.mode === 'all') {
+      renderList(container, templateItem, state.filteredItems, 0, state.filteredItems.length, baseUrl);
+      state.rendered = state.filteredItems.length;
+    } else {
+      renderList(container, templateItem, state.filteredItems, 0, state.loadCount, baseUrl);
+      state.rendered = Math.min(state.loadCount, state.filteredItems.length);
+      updateLoadMoreUI(block, container, state, templateItem, baseUrl);
+    }
+
+    // Done loading
     loader.remove();
 
+    // Optional carousel
     if (config.design === 'carousel' && config.slidesPerRow) {
       setupCustomCarousel(block, Number(config.slidesPerRow) || 1);
-      injectOUCarouselStyles();
+      injectOUStyles();
     }
 
     window.dispatchEvent(new Event('resize'));
   }
 
+  // ---------------- Squarespace item clone
   function createSummaryItemClone(item, templateItem, baseUrl) {
     const clone = templateItem.cloneNode(true);
     const url = normalizeUrl(item);
 
     const titleEl = clone.querySelector('.summary-title');
-    if (titleEl) {
-      titleEl.innerHTML = `<a href="${url}" class="summary-title-link">${escapeHTML(item.title || '')}</a>`;
-    }
+    if (titleEl) titleEl.innerHTML = `<a href="${url}" class="summary-title-link">${escapeHTML(item.title || '')}</a>`;
 
     const excerptEl = clone.querySelector('.summary-excerpt');
     if (excerptEl) excerptEl.innerHTML = item.excerpt || '';
 
     const linkEl = clone.querySelector('.summary-read-more-link');
-    if (linkEl) {
-      linkEl.setAttribute('href', url);
-      linkEl.textContent = 'Read More →';
-    }
+    if (linkEl) { linkEl.setAttribute('href', url); linkEl.textContent = 'Read More →'; }
 
     const imageLinkEl = clone.querySelector('.summary-thumbnail-outer-container a');
     const imageEl = clone.querySelector('.summary-thumbnail-outer-container img');
     const imageWrapper = clone.querySelector('.summary-thumbnail-outer-container');
-
     if (imageLinkEl) imageLinkEl.setAttribute('href', url);
     if (imageEl) {
       if (item.assetUrl) {
@@ -287,13 +402,10 @@ try {
   }
 
   function normalizeUrl(item) {
-    if (item?.sourceUrl) {
-      return item.sourceUrl.startsWith('http') ? item.sourceUrl : `http://${item.sourceUrl}`;
-    }
+    if (item?.sourceUrl) return item.sourceUrl.startsWith('http') ? item.sourceUrl : `http://${item.sourceUrl}`;
     if (item?.fullUrl) return item.fullUrl;
     return '#';
   }
-
   function escapeHTML(str) {
     return String(str)
       .replaceAll('&', '&amp;')
@@ -303,7 +415,7 @@ try {
       .replaceAll("'", '&#039;');
   }
 
-  // ---- Carousel helpers
+  // ---------------- Carousel + styles
   function setupCustomCarousel(block, slidesPerRow = 1) {
     const container = block.querySelector('.summary-item-list');
     const pager = block.querySelector('.summary-carousel-pager');
@@ -350,7 +462,7 @@ try {
     setTimeout(updateArrows, 120);
   }
 
-  function injectOUCarouselStyles() {
+  function injectOUStyles() {
     if (document.getElementById('ou-summary-styles')) return;
     const style = document.createElement('style');
     style.id = 'ou-summary-styles';
@@ -372,14 +484,9 @@ try {
         color: inherit;
         margin-bottom: 15px;
       }
-      .ou-summary .ou-carousel-prev:before {
-        content: "\\E02C";
-        font-family: 'squarespace-ui-font';
-      }
-      .ou-summary .ou-carousel-next:before {
-        content: "\\E02D";
-        font-family: 'squarespace-ui-font';
-      }
+      .ou-summary .ou-carousel-prev:before { content: "\\E02C"; font-family: 'squarespace-ui-font'; }
+      .ou-summary .ou-carousel-next:before { content: "\\E02D"; font-family: 'squarespace-ui-font'; }
+
       .ou-summary-loading {
         padding: 2em;
         font-style: italic;
@@ -399,9 +506,33 @@ try {
       }
       .ou-summary-load-more:hover { background: #111; }
       .ou-summary .ou-summary-load-more-wrapper { text-align: center; }
+
       .ou-summary .summary-item-list { display: flex; flex-wrap: wrap; }
       .ou-summary .summary-item { clear: initial !important; float: initial !important; }
+
+      .ou-summary-filterbar select {
+        padding: 6px 8px;
+        border: 1px solid rgba(0,0,0,.2);
+        border-radius: 4px;
+        background: #fff;
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  // ---------------- Init
+  async function init() {
+    try {
+      const blocks = Array.from(document.querySelectorAll(SELECTOR_BLOCK))
+        .filter(b => !b.hasAttribute(BLOCK_FLAG));
+      if (!blocks.length) return;
+
+      injectOUStyles();
+
+      for (const block of blocks) {
+        block.setAttribute(BLOCK_FLAG, '1');
+        processBlock(block).catch(e => err('processBlock failed', e));
+      }
+    } catch (e) { err('init error', e); }
   }
 })();
