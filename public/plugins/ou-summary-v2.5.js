@@ -124,7 +124,32 @@
     }
 
     const items = [];
-    await fetchAllPages(initialUrl, items);
+    // BEFORE (browser paginates itself)
+// await fetchAllPages(initialUrl, items);
+
+// AFTER (server aggregates + caches)
+const apiBase = 'https://ss-summary-access-production.up.railway.app/api/summary';
+const currentDomain = window.location.hostname.replace(/^www\./, '');
+
+const apiParams = new URLSearchParams();
+apiParams.set('domain', currentDomain);
+apiParams.set('base', baseUrl || config.headerText || '/');
+if (config.filter?.category) apiParams.set('category', config.filter.category);
+if (config.filter?.tag)      apiParams.set('tag', config.filter.tag);
+if (config.filter?.featured === true) apiParams.set('featured', 'true');
+
+const apiUrl = `${apiBase}?${apiParams.toString()}`;
+
+let items = [];
+try {
+  const res = await fetch(apiUrl, { credentials: 'omit' });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const json = await res.json();
+  items = Array.isArray(json.items) ? json.items : [];
+} catch (e) {
+  console.error('Summary API failed:', e);
+}
+
 
     let allItems = items;
     if (config.filter?.featured === true) {
@@ -188,26 +213,6 @@
     }
 
     window.dispatchEvent(new Event('resize'));
-  }
-
-  async function fetchAllPages(url, out) {
-    try {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      const json = await res.json();
-      const items = json.items || [];
-      out.push(...items);
-
-      const next = json.pagination?.nextPageUrl;
-      if (json.pagination?.nextPage && next) {
-        let nextUrl = next;
-        if (!nextUrl.includes('format=json')) {
-          nextUrl += (nextUrl.includes('?') ? '&' : '?') + 'format=json';
-        }
-        await fetchAllPages(nextUrl, out);
-      }
-    } catch (e) {
-      err('fetchAllPages failed', url, e);
-    }
   }
 
   function createSummaryItemClone(item, templateItem, baseUrl) {
