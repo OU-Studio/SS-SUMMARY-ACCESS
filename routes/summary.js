@@ -27,6 +27,10 @@ function loadAuthorized() {
     return [];
   }
 }
+function absUrl(origin, href) {
+  return new URL(href, origin).toString(); // handles both absolute + relative
+}
+
 
 // Small helper to parse base to *path only* (drop protocol/host if given)
 function toPathOnly(raw) {
@@ -64,17 +68,16 @@ async function fetchJsonWithRetry(url, retries = 2, backoff = 300) {
 
 // Fetches all pages of a Squarespace collection JSON
 async function fetchAll(domain, baseUrl, filters) {
-  const params = new URLSearchParams();
-  if (filters.category) params.set('category', filters.category);
-  if (filters.tag) params.set('tag', filters.tag);
-  params.set('format', 'json');
-
   const origin = `https://${domain}`;
-  const base = origin + baseUrl;
-  const initialUrl = base + (base.includes('?') ? '&' : '?') + params.toString();
+
+  // Build initial URL robustly
+  const u = new URL(baseUrl, origin); // baseUrl can be "/full-portfolio?..."
+  if (filters.category) u.searchParams.set('category', filters.category);
+  if (filters.tag) u.searchParams.set('tag', filters.tag);
+  u.searchParams.set('format', 'json');
 
   const items = [];
-  let nextUrl = initialUrl;
+  let nextUrl = u.toString();
 
   while (nextUrl) {
     const json = await fetchJsonWithRetry(nextUrl);
@@ -82,9 +85,10 @@ async function fetchAll(domain, baseUrl, filters) {
 
     const next = json.pagination?.nextPage && json.pagination?.nextPageUrl;
     if (next) {
-      nextUrl = next.includes('format=json')
-        ? next
-        : next + (next.includes('?') ? '&' : '?') + 'format=json';
+      // Ensure absolute + format=json
+      const nu = new URL(next, origin);
+      if (!nu.searchParams.has('format')) nu.searchParams.set('format', 'json');
+      nextUrl = nu.toString();
     } else {
       nextUrl = null;
     }
@@ -95,6 +99,7 @@ async function fetchAll(domain, baseUrl, filters) {
   }
   return items;
 }
+
 
 module.exports = async function summaryHandler(req, res) {
   try {
