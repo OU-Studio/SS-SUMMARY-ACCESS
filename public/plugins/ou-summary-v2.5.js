@@ -297,7 +297,7 @@
     OU_SUMMARY_STATE.set(block, state);
 
     // Build filter bar (only in load mode)
-    if (ouCfg.mode !== 'all') {
+    if (ouCfg.mode !== 'a') {
       buildFilterBar(block, state.allItems, (nextCat, nextTag) => {
         state.activeCategory = nextCat || null;
         state.activeTag = nextTag || null;
