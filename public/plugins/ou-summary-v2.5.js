@@ -297,30 +297,54 @@
     OU_SUMMARY_STATE.set(block, state);
 
     // Build filter bar (only in load mode)
-    if (ouCfg.mode !== 'a') {
-      buildFilterBar(block, state.allItems, (nextCat, nextTag) => {
-        state.activeCategory = nextCat || null;
-        state.activeTag = nextTag || null;
-        state.filteredItems = filterItems(state.allItems, state.activeCategory, state.activeTag);
+    if (ouCfg.mode !== 'a') { // keep your existing condition
+  buildFilterBar(block, state.allItems, (nextCat, nextTag) => {
+    state.activeCategory = nextCat || null;
+    state.activeTag = nextTag || null;
+    state.filteredItems = filterItems(state.allItems, state.activeCategory, state.activeTag);
 
-        const keep = Math.min(state.rendered, state.filteredItems.length);
-        renderList(container, templateItem, state.filteredItems, 0, keep, baseUrl);
-        state.rendered = keep;
-
-        updateLoadMoreUI(block, container, state, templateItem, baseUrl);
-        window.dispatchEvent(new Event('resize'));
-      });
+    let keep;
+    if (ouCfg.mode === 'loadAll' || ouCfg.mode === 'all') {
+      // in loadAll/all, always show ALL filtered items
+      keep = state.filteredItems.length;
+    } else {
+      // in normal load mode, preserve how many items are visible
+      keep = Math.min(state.rendered, state.filteredItems.length);
     }
 
-    // Initial render
-    if (ouCfg.mode === 'all') {
-      renderList(container, templateItem, state.filteredItems, 0, state.filteredItems.length, baseUrl);
-      state.rendered = state.filteredItems.length;
+    renderList(container, templateItem, state.filteredItems, 0, keep, baseUrl);
+    state.rendered = keep;
+
+    if (ouCfg.mode === 'loadAll' || ouCfg.mode === 'all') {
+      // ensure Load More is hidden
+      const wrap = block.querySelector('.ou-summary-load-more-wrapper');
+      if (wrap) wrap.style.display = 'none';
     } else {
-      renderList(container, templateItem, state.filteredItems, 0, state.loadCount, baseUrl);
-      state.rendered = Math.min(state.loadCount, state.filteredItems.length);
       updateLoadMoreUI(block, container, state, templateItem, baseUrl);
     }
+
+    window.dispatchEvent(new Event('resize'));
+  });
+}
+
+
+    // Initial render
+    // Initial render
+if (ouCfg.mode === 'all' || ouCfg.mode === 'loadAll') {
+  // show everything, no Load More
+  renderList(container, templateItem, state.filteredItems, 0, state.filteredItems.length, baseUrl);
+  state.rendered = state.filteredItems.length;
+
+  // make sure Load More wrapper (if any) is hidden
+  const wrap = block.querySelector('.ou-summary-load-more-wrapper');
+  if (wrap) wrap.style.display = 'none';
+} else {
+  // classic load-more mode
+  renderList(container, templateItem, state.filteredItems, 0, state.loadCount, baseUrl);
+  state.rendered = Math.min(state.loadCount, state.filteredItems.length);
+  updateLoadMoreUI(block, container, state, templateItem, baseUrl);
+}
+
 
     // Done loading
     loader.remove();
