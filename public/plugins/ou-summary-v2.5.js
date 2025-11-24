@@ -138,7 +138,7 @@
       select.innerHTML = '';
       const any = document.createElement('option');
       any.value = '';
-      any.textContent = `All ${label}`;
+      any.textContent = `All Projects`;
       select.appendChild(any);
       values.forEach(v => {
         const opt = document.createElement('option');
