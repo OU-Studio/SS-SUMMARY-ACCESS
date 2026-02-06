@@ -1,6 +1,7 @@
 const fs = require('fs');
 
 module.exports = function verifyAccess(req, res, next) {
+  /*
   const accessKey = req.body.accessKey || req.headers['x-access-key'];
   const domain = req.body.domain || req.headers['x-domain'];
 
@@ -20,5 +21,6 @@ module.exports = function verifyAccess(req, res, next) {
   }
 
   req.user = match;
+  */
   next();
 };
